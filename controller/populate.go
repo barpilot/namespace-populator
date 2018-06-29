@@ -5,7 +5,6 @@ import (
 
 	"github.com/spotahome/kooper/operator/controller"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 
@@ -25,12 +24,8 @@ type Controller struct {
 func New(config Config, k8sCli kubernetes.Interface, logger log.Logger) (*Controller, error) {
 
 	ret := NewNamespaceRetrieve(k8sCli)
-	cm, err := k8sCli.CoreV1().ConfigMaps("").Get(config.Configmaps[0], metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	populatorSrv := service.NewConfigMapPopulator(logger, cm, k8sCli)
-	handler := &handler{populatorSrv: populatorSrv}
+	populatorSrv := service.NewConfigMapPopulator(logger, config.Configmaps[0], k8sCli)
+	handler := &handler{populatorSrv: populatorSrv, logger: logger}
 
 	ctrl := controller.NewSequential(config.ResyncPeriod, handler, ret, nil, logger)
 
@@ -48,6 +43,7 @@ const (
 
 type handler struct {
 	populatorSrv service.Populator
+	logger       log.Logger
 }
 
 func (h *handler) Add(obj runtime.Object) error {
@@ -55,6 +51,7 @@ func (h *handler) Add(obj runtime.Object) error {
 	if !ok {
 		return fmt.Errorf("Not a namespace")
 	}
+	h.logger.Infof("youhouuo a new namespace")
 	h.populatorSrv.CreateManifests(namespace)
 	return nil
 }

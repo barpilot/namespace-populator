@@ -6,15 +6,16 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/operator-framework/operator-sdk/pkg/sdk/action"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
 	"github.com/barpilot/namespace-populator/log"
+	"github.com/barpilot/namespace-populator/util/namespace"
+	"github.com/operator-framework/operator-sdk/pkg/sdk/action"
+	"github.com/operator-framework/operator-sdk/pkg/util/k8sutil"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // Echo is simple echo service.
@@ -26,12 +27,14 @@ type Populator interface {
 type ConfigMapPopulator struct {
 	logger log.Logger
 
-	configmap *corev1.ConfigMap
+	configmap string
 	k8sCli    kubernetes.Interface
 }
 
+type generic map[string]interface{}
+
 // NewSimpleEcho returns a new SimpleEcho.
-func NewConfigMapPopulator(logger log.Logger, cm *corev1.ConfigMap, k8sCli kubernetes.Interface) *ConfigMapPopulator {
+func NewConfigMapPopulator(logger log.Logger, cm string, k8sCli kubernetes.Interface) *ConfigMapPopulator {
 	return &ConfigMapPopulator{
 		logger:    logger,
 		configmap: cm,
@@ -39,34 +42,46 @@ func NewConfigMapPopulator(logger log.Logger, cm *corev1.ConfigMap, k8sCli kuber
 	}
 }
 
-func (c *ConfigMapPopulator) CreateManifests(namespace *corev1.Namespace) error {
+func (c *ConfigMapPopulator) CreateManifests(ns *corev1.Namespace) error {
 
-	return nil
-}
+	cm, err := c.k8sCli.CoreV1().ConfigMaps(namespace.Namespace()).Get(c.configmap, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
 
-func (c *ConfigMapPopulator) getmanifests(namespace *corev1.Namespace) error {
-
-	for filename, manifest := range c.configmap.Data {
+	for filename, manifest := range cm.Data {
 		var result bytes.Buffer
+		//c.logger.Infof(manifest)
 		t := template.Must(template.New(filename).Parse(manifest))
-		if err := t.Execute(&result, namespace); err != nil {
+		if err := t.Execute(&result, ns); err != nil {
 			return err
 		}
-		var obj runtime.Object
-		if err := yaml.NewYAMLToJSONDecoder(&result).Decode(obj); err != nil {
-			return err
-		}
-		addAnnotation(obj)
+		//c.logger.Infof(result.String())
 
-		if err := action.Create(obj); err != nil && !apierrors.IsAlreadyExists(err) {
+		obj := generic{}
+		//test, _, _ := runtime.Decoder.Decode($result, nil, nil)
+		//c.logger.Infof("%+v", test)
+
+		if err := yaml.NewYAMLOrJSONDecoder(&result, 4096).Decode(&obj); err != nil {
+			c.logger.Infof(err.Error())
+			return err
+		}
+
+		unStrObj := unstructured.Unstructured{Object: obj}
+		flagObject(&unStrObj, ns.Name)
+
+		strObj := k8sutil.RuntimeObjectFromUnstructured(&unStrObj)
+
+		if err := action.Create(strObj); err != nil && !apierrors.IsAlreadyExists(err) {
+			c.logger.Infof(err.Error())
 			return err
 		}
 	}
 	return nil
 }
 
-func addAnnotation(obj metav1.Object) {
+func flagObject(obj metav1.Object, namespace string) {
 	annotations := obj.GetAnnotations()
-	annotations["toto"] = "tata"
+	annotations["namespace-populator.barpilot.io/namespace"] = namespace
 	obj.SetAnnotations(annotations)
 }
