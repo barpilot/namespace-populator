@@ -7,6 +7,6 @@ import (
 // Config is the controller configuration.
 type Config struct {
 	ResyncPeriod time.Duration
-	Configmaps   []string
+	Labels   string
 	//Namespace    string
 }

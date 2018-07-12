@@ -9,13 +9,13 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// PodRetrieve knows how to retrieve pods.
+// NamespaceRetrieve knows how to retrieve pods.
 type NamespaceRetrieve struct {
 	//namespace string
 	client kubernetes.Interface
 }
 
-// NewPodRetrieve returns a new pod retriever.
+// NewNamespaceRetrieve returns a new namespace retriever.
 func NewNamespaceRetrieve(client kubernetes.Interface) *NamespaceRetrieve {
 	return &NamespaceRetrieve{
 		//namespace: namespace,
@@ -23,7 +23,7 @@ func NewNamespaceRetrieve(client kubernetes.Interface) *NamespaceRetrieve {
 	}
 }
 
-// GetListerWatcher knows how to return a listerWatcher of a pod.
+// GetListerWatcher knows how to return a listerWatcher of a namespace.
 func (p *NamespaceRetrieve) GetListerWatcher() cache.ListerWatcher {
 
 	return &cache.ListWatch{
@@ -36,7 +36,7 @@ func (p *NamespaceRetrieve) GetListerWatcher() cache.ListerWatcher {
 	}
 }
 
-// GetObject returns the empty pod.
+// GetObject returns the empty namespace.
 func (p *NamespaceRetrieve) GetObject() runtime.Object {
 	return &corev1.Namespace{}
 }

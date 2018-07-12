@@ -5,83 +5,122 @@ import (
 	"text/template"
 
 	corev1 "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/barpilot/namespace-populator/log"
 	"github.com/barpilot/namespace-populator/util/namespace"
-	"github.com/operator-framework/operator-sdk/pkg/sdk/action"
-	"github.com/operator-framework/operator-sdk/pkg/util/k8sutil"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-// Echo is simple echo service.
+const (
+	AnnotationIndicator = "namespace-populator.barpilot.io/namespace"
+	AnnotationSelector  = "namespace-populator.barpilot.io/selector"
+)
+
+// Populator is a populator service.
 type Populator interface {
 	CreateManifests(*corev1.Namespace) error
 }
 
-// SimpleEcho echoes the received object name.
+// ConfigMapPopulator echoes the received object name.
 type ConfigMapPopulator struct {
 	logger log.Logger
 
-	configmap string
-	k8sCli    kubernetes.Interface
+	labels string
+	k8sCli kubernetes.Interface
+	dynCli dynamic.Interface
 }
 
 type generic map[string]interface{}
 
-// NewSimpleEcho returns a new SimpleEcho.
-func NewConfigMapPopulator(logger log.Logger, cm string, k8sCli kubernetes.Interface) *ConfigMapPopulator {
+// NewConfigMapPopulator returns a new ConfigMapPopulator.
+func NewConfigMapPopulator(logger log.Logger, labels string, k8sCli kubernetes.Interface, dynCli dynamic.Interface) *ConfigMapPopulator {
 	return &ConfigMapPopulator{
-		logger:    logger,
-		configmap: cm,
-		k8sCli:    k8sCli,
+		logger: logger,
+		labels: labels,
+		k8sCli: k8sCli,
+		dynCli: dynCli,
 	}
 }
 
 func (c *ConfigMapPopulator) CreateManifests(ns *corev1.Namespace) error {
-
-	cm, err := c.k8sCli.CoreV1().ConfigMaps(namespace.Namespace()).Get(c.configmap, metav1.GetOptions{})
+	l, err := c.k8sCli.CoreV1().ConfigMaps(namespace.Namespace()).List(metav1.ListOptions{LabelSelector: c.labels})
 	if err != nil {
 		return err
 	}
 
-	for filename, manifest := range cm.Data {
-		var result bytes.Buffer
-		//c.logger.Infof(manifest)
-		t := template.Must(template.New(filename).Parse(manifest))
-		if err := t.Execute(&result, ns); err != nil {
-			return err
-		}
-		//c.logger.Infof(result.String())
+	for _, cm := range l.Items {
 
-		obj := generic{}
-		//test, _, _ := runtime.Decoder.Decode($result, nil, nil)
-		//c.logger.Infof("%+v", test)
-
-		if err := yaml.NewYAMLOrJSONDecoder(&result, 4096).Decode(&obj); err != nil {
-			c.logger.Infof(err.Error())
-			return err
+		if !validateConfigMap(&cm, ns) {
+			continue
 		}
 
-		unStrObj := unstructured.Unstructured{Object: obj}
-		flagObject(&unStrObj, ns.Name)
+		for filename, manifest := range cm.Data {
+			var result bytes.Buffer
+			t := template.Must(template.New(filename).Parse(manifest))
+			if err := t.Execute(&result, ns); err != nil {
+				return err
+			}
 
-		strObj := k8sutil.RuntimeObjectFromUnstructured(&unStrObj)
+			obj := generic{}
 
-		if err := action.Create(strObj); err != nil && !apierrors.IsAlreadyExists(err) {
-			c.logger.Infof(err.Error())
-			return err
+			if err := yaml.NewYAMLOrJSONDecoder(&result, 4096).Decode(&obj); err != nil {
+				c.logger.Infof(err.Error())
+				return err
+			}
+
+			unStrObj := unstructured.Unstructured{Object: obj}
+			flagObject(&unStrObj, ns.Name)
+
+			//c.logger.Infof(unStrObj.GetName())
+
+			_, err := c.dynCli.Resource(c.groupVersionResource(unStrObj)).Namespace(unStrObj.GetNamespace()).Create(&unStrObj)
+			if err != nil && !apierrors.IsAlreadyExists(err) {
+				c.logger.Infof(err.Error())
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func flagObject(obj metav1.Object, namespace string) {
+func (c *ConfigMapPopulator) groupVersionResource(unStrObj unstructured.Unstructured) schema.GroupVersionResource {
+	gvr, _ := meta.UnsafeGuessKindToResource(unStrObj.GroupVersionKind())
+	//c.logger.Infof(gvr.String())
+	return gvr
+}
+
+func validateConfigMap(cm *corev1.ConfigMap, ns *corev1.Namespace) bool {
+	if selector, ok := cm.Annotations[AnnotationSelector]; ok {
+		ls, err := metav1.ParseToLabelSelector(selector)
+		if err != nil {
+			return false
+		}
+
+		s, err := metav1.LabelSelectorAsSelector(ls)
+		if err != nil {
+			return false
+		}
+		if !s.Matches(labels.Set(ns.Labels)) {
+			return false
+		}
+	}
+	return true
+}
+
+func flagObject(obj *unstructured.Unstructured, namespace string) {
 	annotations := obj.GetAnnotations()
-	annotations["namespace-populator.barpilot.io/namespace"] = namespace
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[AnnotationIndicator] = namespace
 	obj.SetAnnotations(annotations)
 }

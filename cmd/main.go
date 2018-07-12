@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	applogger "github.com/spotahome/kooper/log"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	"k8s.io/client-go/rest"
@@ -38,13 +39,13 @@ func (m *Main) Run(stopC <-chan struct{}) error {
 	m.logger.Infof("initializing namespace-populator")
 
 	// Get kubernetes rest client.
-	k8sCli, err := m.getKubernetesClient()
+	k8sCli, dynCli, err := m.getKubernetesClient()
 	if err != nil {
 		return err
 	}
 
 	// Create the controller and run
-	ctrl, err := controller.New(m.config, k8sCli, m.logger)
+	ctrl, err := controller.New(m.config, k8sCli, dynCli, m.logger)
 	if err != nil {
 		return err
 	}
@@ -52,7 +53,7 @@ func (m *Main) Run(stopC <-chan struct{}) error {
 	return ctrl.Run(stopC)
 }
 
-func (m *Main) getKubernetesClient() (kubernetes.Interface, error) {
+func (m *Main) getKubernetesClient() (kubernetes.Interface, dynamic.Interface, error) {
 	var err error
 	var cfg *rest.Config
 
@@ -60,16 +61,19 @@ func (m *Main) getKubernetesClient() (kubernetes.Interface, error) {
 	if m.flags.Development {
 		cfg, err = clientcmd.BuildConfigFromFlags("", m.flags.KubeConfig)
 		if err != nil {
-			return nil, fmt.Errorf("could not load configuration: %s", err)
+			return nil, nil, fmt.Errorf("could not load configuration: %s", err)
 		}
 	} else {
 		cfg, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, fmt.Errorf("error loading kubernetes configuration inside cluster, check app is running outside kubernetes cluster or run in development mode: %s", err)
+			return nil, nil, fmt.Errorf("error loading kubernetes configuration inside cluster, check app is running outside kubernetes cluster or run in development mode: %s", err)
 		}
 	}
 
-	return kubernetes.NewForConfig(cfg)
+	dynCli, err := dynamic.NewForConfig(cfg)
+	kubeCli, err := kubernetes.NewForConfig(cfg)
+
+	return kubeCli, dynCli, nil
 }
 
 func main() {

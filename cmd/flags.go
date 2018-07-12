@@ -4,7 +4,6 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/barpilot/namespace-populator/controller"
@@ -15,7 +14,7 @@ import (
 type Flags struct {
 	flagSet *flag.FlagSet
 
-	Configmaps  string
+	Labels      string
 	ResyncSec   int
 	KubeConfig  string
 	Development bool
@@ -24,7 +23,7 @@ type Flags struct {
 // ControllerConfig converts the command line flag arguments to controller configuration.
 func (f *Flags) ControllerConfig() controller.Config {
 	return controller.Config{
-		Configmaps:   strings.Split(f.Configmaps, ","),
+		Labels:       f.Labels,
 		ResyncPeriod: time.Duration(f.ResyncSec) * time.Second,
 	}
 }
@@ -38,7 +37,7 @@ func NewFlags() *Flags {
 	kubehome := filepath.Join(homedir.HomeDir(), ".kube", "config")
 
 	// Init flags.
-	f.flagSet.StringVar(&f.Configmaps, "configmaps", "", "Configmaps with manifests to apply. comma separated")
+	f.flagSet.StringVar(&f.Labels, "labels", "", "Labels to match configmaps with manifests to apply. comma separated")
 	f.flagSet.IntVar(&f.ResyncSec, "resync-seconds", 30, "The number of seconds the controller will resync the resources")
 	f.flagSet.StringVar(&f.KubeConfig, "kubeconfig", kubehome, "kubernetes configuration path, only used when development mode enabled")
 	f.flagSet.BoolVar(&f.Development, "development", false, "development flag will allow to run the operator outside a kubernetes cluster")
