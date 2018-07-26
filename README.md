@@ -50,6 +50,7 @@ data:
 
 ## Limitations
 
+* You can only put 1 resource by file in configmaps (but you can add multiple files)
 * Resources aren't removed on namespace deletion (this can be added later #1 )
 * Resources are created but not updated
 * Resources deleted are recreated (even if no new namespaces are created, controller process namespaces each 30 sec)
