@@ -133,17 +133,6 @@
   version = "v1.0.2"
 
 [[projects]]
-  name = "github.com/operator-framework/operator-sdk"
-  packages = [
-    "pkg/k8sclient",
-    "pkg/sdk/action",
-    "pkg/sdk/types",
-    "pkg/util/k8sutil"
-  ]
-  revision = "31577c9d90b99b63043d2014de8fb2dd855aee78"
-  version = "v0.0.5"
-
-[[projects]]
   name = "github.com/pborman/uuid"
   packages = ["."]
   revision = "e790cca94e6cc75c7064b1332e63811d4aae1a53"
@@ -392,7 +381,6 @@
   name = "k8s.io/client-go"
   packages = [
     "discovery",
-    "discovery/cached",
     "dynamic",
     "kubernetes",
     "kubernetes/scheme",
@@ -467,6 +455,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2e3410704bde14bd5cb88c28b71382f4ea26d841522cbc0bbede8c390ee2e9e7"
+  inputs-digest = "91148fbfc130b346734a6ecc4e0c9f4f5e4c9869d53c69f06895b5d10085de21"
   solver-name = "gps-cdcl"
   solver-version = 1
