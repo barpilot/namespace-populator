@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test
+  labels:
+    app: namespace-populator
+data:
+  pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: nginx
+      namespace: kube-system
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: namespace-populator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: namespace-populator
+  template:
+    metadata:
+      labels:
+        app: namespace-populator
+    spec:
+      containers:
+      - image: barpilot/namespace-populator
+        args:
+        - --labels=app=namespace-populator
+        imagePullPolicy: IfNotPresent
+        name: controller
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
